@@ -1,0 +1,132 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Vacuum Agent Simulator</title>
+  <link rel="stylesheet" href="{% static 'simulator/css/style.css' %}">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo" aria-hidden="true"></span><h1>VACUUM AGENT SIMULATOR</h1></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-view="simulate">Simulate</button>
+    <button class="tab" data-view="compare">Compare</button>
+    <button class="tab" data-view="peas">PEAS &amp; Concepts</button>
+  </nav>
+</header>
+<div id="toast" class="toast" hidden></div>
+
+<main>
+<!-- ============================ SIMULATE ============================ -->
+<section id="view-simulate" class="view active">
+  <div class="layout">
+    <div class="col">
+      <div class="card">
+        <h2>Environment &amp; Agent</h2>
+        <div class="form-grid">
+          <label>Width<input id="in-width" type="number" min="{{ limits.min }}" max="{{ limits.max }}" value="10"></label>
+          <label>Height<input id="in-height" type="number" min="{{ limits.min }}" max="{{ limits.max }}" value="10"></label>
+          <label>Dirt %<input id="in-dirt" type="number" min="0" max="100" value="30"></label>
+          <label>Obstacles %<input id="in-obstacles" type="number" min="0" max="100" value="10"></label>
+          <label>Start
+            <select id="in-start"><option value="random">Random</option><option value="fixed">Top-left</option></select></label>
+          <label>Seed<input id="in-seed" type="text" inputmode="numeric" placeholder="random"></label>
+          <label>Agent
+            <select id="in-agent">{% for a in agents %}<option value="{{ a.kind }}" title="{{ a.description }}"{% if a.kind == 'goal' %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></label>
+          <label>Sensors
+            <select id="in-sensors"><option value="LOCAL">LOCAL (partial view)</option><option value="FULL">FULL (whole grid)</option></select></label>
+        </div>
+        <p id="agent-description" class="muted small"></p>
+        <div class="row">
+          <button id="btn-generate" class="btn primary">Generate Environment</button>
+          <span class="muted small" id="env-label"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Grid World</h2>
+          <div class="edit-tools" role="group" aria-label="Manual editing">
+            <span class="muted small">Edit:</span>
+            <button class="tool" data-tool="D">Dirt</button>
+            <button class="tool" data-tool="#">Obstacle</button>
+            <button class="tool" data-tool=".">Clean</button>
+            <button class="tool" data-tool="start">Start</button>
+          </div>
+        </div>
+        <div id="grid-wrap" class="grid-wrap"><div id="grid" class="grid"></div><div id="vacuum" class="vacuum"></div></div>
+        <div class="legend">
+          <span><i class="sw sw-clean"></i>Clean</span><span><i class="sw sw-dirt"></i>Dirt</span>
+          <span><i class="sw sw-obstacle"></i>Obstacle</span><span><i class="sw sw-path"></i>Agent's plan</span>
+          <span><i class="sw sw-visited"></i>Visited</span>
+        </div>
+        <div class="row controls">
+          <button id="btn-start" class="btn primary">Start</button>
+          <button id="btn-pause" class="btn">Pause</button>
+          <button id="btn-step" class="btn">Step</button>
+          <button id="btn-reset" class="btn">Reset</button>
+          <button id="btn-replay" class="btn">Replay</button>
+          <label class="speed">Speed <input id="in-speed" type="range" min="1" max="10" value="6"></label>
+        </div>
+      </div>
+
+      <div class="card" id="dashboard"></div>
+    </div>
+
+    <div class="col">
+      <div class="card" id="brain"></div>
+      <div class="card"><h2>Percept History</h2><div id="history" class="history"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ COMPARE ============================= -->
+<section id="view-compare" class="view">
+  <div class="card">
+    <h2>Comparison Mode</h2>
+    <p class="muted">Every selected agent runs on an identical copy of the current environment. All numbers come from real simulations.</p>
+    <div class="row wrap" id="compare-agents">
+      {% for a in agents %}<label class="check"><input type="checkbox" value="{{ a.kind }}"{% if a.kind != 'learning' %} checked{% endif %}> {{ a.name }}</label>{% endfor %}
+    </div>
+    <div class="row"><button id="btn-compare" class="btn primary">Run Comparison</button><span class="muted small" id="compare-note"></span></div>
+  </div>
+  <div id="compare-result"></div>
+</section>
+
+<!-- ============================== PEAS ============================== -->
+<section id="view-peas" class="view">
+  <div class="card">
+    <h2>PEAS Description of the Task Environment</h2>
+    <div class="peas">
+      <div><b>P &mdash; Performance</b><p>Dirt cleaned <code>+{{ scoring.dirt_cleaned|floatformat:0 }}</code>, move <code>{{ scoring.move_cost|floatformat:0 }}</code>, collision <code>{{ scoring.collision_penalty|floatformat:0 }}</code>, SUCK on a clean cell <code>{{ scoring.wasted_suck_penalty|floatformat:0 }}</code>, all reachable dirt cleaned <code>+{{ scoring.completion_bonus|floatformat:0 }}</code>.</p></div>
+      <div><b>E &mdash; Environment</b><p>Grid world with clean/dirty cells and obstacles. Discrete, single-agent, deterministic, sequential, static (only the agent changes it). Partially observable in LOCAL sensor mode, fully observable in FULL mode.</p></div>
+      <div><b>A &mdash; Actuators</b><p><code>MOVE_UP</code> <code>MOVE_DOWN</code> <code>MOVE_LEFT</code> <code>MOVE_RIGHT</code> <code>SUCK</code> <code>STOP</code></p></div>
+      <div><b>S &mdash; Sensors</b><p>Own position, status of the current cell, the four neighbouring cells (clean / dirty / obstacle / wall). In FULL mode: the whole grid.</p></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Where each AI concept lives in the code</h2>
+    <table class="data">
+      <thead><tr><th>Concept</th><th>Implementation</th></tr></thead>
+      <tbody>
+        <tr><td>Environment</td><td><code>environment/environment.py</code> &mdash; owns the ground truth and the rules</td></tr>
+        <tr><td>Sensors / Percepts</td><td><code>agents/sensors.py</code>, <code>domain.Percept</code> &mdash; the only read channel</td></tr>
+        <tr><td>Actuators / Actions</td><td><code>agents/actuators.py</code>, <code>domain.Action</code> &mdash; the only write channel</td></tr>
+        <tr><td>Agent Function / Program</td><td><code>BaseAgent.decide(percept, history)</code></td></tr>
+        <tr><td>Simple Reflex Agent</td><td><code>agents/reflex_agent.py</code> &mdash; condition-action rules</td></tr>
+        <tr><td>Goal-Based Agent</td><td><code>agents/goal_agent.py</code> + <code>world_model.py</code> + BFS</td></tr>
+        <tr><td>Utility-Based Agent</td><td><code>agents/utility_agent.py</code> &mdash; explicit utility per action</td></tr>
+        <tr><td>Learning Agent</td><td><code>agents/learning_agent.py</code> &mdash; Q-learning (critic = performance measure)</td></tr>
+        <tr><td>Performance Measure / Rationality</td><td><code>simulation/performance.py</code>, comparison mode</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+{{ agents|json_script:"agents-data" }}
+<script type="module" src="{% static 'simulator/js/main.js' %}"></script>
+</body>
+</html>
